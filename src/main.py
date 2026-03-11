@@ -55,7 +55,7 @@ def send_wechat_message(webhook_url: str, content: str):
         return False
 
 
-def fetch_insurance_news():
+def fetch_rss_news():
     """
     获取保险行业新闻
     """
