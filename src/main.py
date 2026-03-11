@@ -55,56 +55,69 @@ def send_wechat_message(webhook_url: str, content: str):
         return False
 
 
-def fetch_rss_news():
+def fetch_insurance_news():
     """
-    获取RSS新闻（简化版）
-    
-    Returns:
-        list: 新闻列表
+    获取保险行业新闻
     """
-    try:
-        import feedparser
-        from datetime import timedelta
-        
-        logger.info("正在获取RSS新闻...")
-        
-        # 央视网财经RSS
-        rss_url = "http://www.cctv.com/program/rss/02/04/index.xml"
-        feed = feedparser.parse(rss_url)
-        
-        news_list = []
-        time_threshold = datetime.now() - timedelta(hours=24)
-        
-        for entry in feed.entries[:10]:  # 只取前10条
-            try:
+    import feedparser
+    from datetime import datetime, timedelta
+
+    rss_sources = [
+        ("央视网财经", "http://www.cctv.com/program/rss/02/04/index.xml"),
+        ("财新", "https://www.caixin.com/rss/finance.xml"),
+        ("第一财经", "https://www.yicai.com/rss/news.xml"),
+        ("InsuranceJournal", "https://www.insurancejournal.com/feed/"),
+        ("ReinsuranceNews", "https://www.reinsurancene.ws/feed/")
+    ]
+
+    keywords = [
+        "保险","险企","寿险","财险",
+        "中国平安","中国人寿","中国太保",
+        "新华保险","友邦","泰康",
+        "insurance","insurer"
+    ]
+
+    news_list = []
+    time_threshold = datetime.now() - timedelta(hours=24)
+
+    for source_name, rss_url in rss_sources:
+
+        try:
+            feed = feedparser.parse(rss_url)
+
+            for entry in feed.entries[:20]:
+
+                title = entry.get("title", "")
+                summary = entry.get("summary", "")
+
+                text = title + summary
+
+                # 关键词过滤
+                if not any(k.lower() in text.lower() for k in keywords):
+                    continue
+
                 published_time = None
                 if hasattr(entry, 'published_parsed') and entry.published_parsed:
                     published_time = datetime(*entry.published_parsed[:6])
-                
-                # 过滤24小时内的新闻
+
                 if published_time and published_time < time_threshold:
                     continue
-                
+
                 news_item = {
-                    'title': entry.get('title', '无标题'),
-                    'link': entry.get('link', ''),
-                    'summary': entry.get('summary', '')[:100],  # 截取前100字
-                    'source': '央视网财经',
-                    'published_time': published_time
+                    "title": title,
+                    "link": entry.get("link", ""),
+                    "summary": summary[:120],
+                    "source": source_name,
+                    "published_time": published_time
                 }
-                
+
                 news_list.append(news_item)
-                
-            except Exception as e:
-                logger.error(f"解析新闻条目失败: {e}")
-                continue
-        
-        logger.info(f"成功获取 {len(news_list)} 条新闻")
-        return news_list
-        
-    except Exception as e:
-        logger.error(f"获取RSS新闻失败: {e}")
-        return []
+
+        except Exception as e:
+            logger.error(f"RSS源 {source_name} 获取失败: {e}")
+
+    # 限制最多10条
+    return news_list[:10]
 
 
 def format_news_message(news_list):
