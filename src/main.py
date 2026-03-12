@@ -1,137 +1,101 @@
 """
-保险资讯聚合推送系统 - 主程序
+保险资讯自动推送系统
 """
 
 import os
 import sys
 import logging
+import requests
 from datetime import datetime
-from rss_fetcher import fetch_rss_news_v3
 
-# 日志配置
+from rss_fetcher import fetch_rss_news
+
+
 logging.basicConfig(
+
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    format="%(asctime)s - %(levelname)s - %(message)s"
+
 )
 
 logger = logging.getLogger(__name__)
 
 
-def send_wechat_message(webhook_url: str, content: str):
+def send_wechat(webhook, content):
 
-    try:
-        import requests
+    data = {
 
-        data = {
-            "msgtype": "markdown",
-            "markdown": {"content": content}
+        "msgtype": "markdown",
+
+        "markdown": {
+            "content": content
         }
 
-        response = requests.post(webhook_url, json=data, timeout=10)
-        result = response.json()
+    }
 
-        if result.get("errcode") == 0:
-            logger.info("✅ 消息推送成功")
-            return True
-        else:
-            logger.error(f"❌ 消息推送失败: {result}")
-            return False
+    r = requests.post(webhook, json=data)
 
-    except Exception as e:
-        logger.error(f"❌ 推送异常: {e}")
-        return False
+    return r.json()
 
 
-def format_news_message(news_list):
+def format_news(news_list):
 
     today = datetime.now().strftime("%m.%d")
 
-    message = [
+    lines = [
+
         "## 📰 保险资讯早报",
         "",
-        f"> **日期**: {today}",
-        "> **来源**: 央视 / 财联社 / 财新 / 第一财经等",
+        f"> 日期：{today}",
+        "> 来源：央视 / 财联社 / 财新 / 第一财经",
         ""
     ]
 
     if not news_list:
 
-        message.append("暂无新的保险资讯。")
+        lines.append("暂无新的保险资讯")
 
     else:
 
-        for i, news in enumerate(news_list[:10], 1):
+        for i, n in enumerate(news_list, 1):
 
-            title = news.get("title", "")
-            link = news.get("link", "")
-            summary = news.get("summary", "")
-            source = news.get("source", "")
+            lines.append(f"**{i}. {n['title']}**")
+            lines.append(f"> 来源：{n['source']}")
 
-            message.append(f"**{i}. {title}**")
-            message.append(f"> 来源: {source}")
+            if n["summary"]:
+                lines.append(f"> 摘要：{n['summary']}")
 
-            if summary:
-                message.append(f"> 摘要: {summary}")
+            if n["link"]:
+                lines.append(f"> [查看详情]({n['link']})")
 
-            if link:
-                message.append(f"> [查看详情]({link})")
+            lines.append("")
 
-            message.append("")
+    lines.append("---")
+    lines.append(f"*更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}*")
 
-    message.append("---")
-    message.append(f"*更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}*")
-
-    return "\n".join(message)
+    return "\n".join(lines)
 
 
 def main():
 
-    logger.info("====== 保险资讯系统启动 ======")
-
-    webhook = os.environ.get("WECHAT_WEBHOOK")
+    webhook = os.getenv("WECHAT_WEBHOOK")
 
     if not webhook:
 
         logger.error("未配置 WECHAT_WEBHOOK")
         sys.exit(1)
 
-    try:
+    logger.info("抓取新闻")
 
-        logger.info("抓取新闻...")
+    news = fetch_rss_news()
 
-        news_list = fetch_rss_news_v3()
+    logger.info(f"获取 {len(news)} 条新闻")
 
-        logger.info(f"获取 {len(news_list)} 条新闻")
+    message = format_news(news)
 
-        message = format_news_message(news_list)
+    logger.info("推送企业微信")
 
-        logger.info("推送企业微信...")
-
-        success = send_wechat_message(webhook, message)
-
-        if not success:
-            sys.exit(1)
-
-    except Exception as e:
-
-        logger.error(f"程序异常: {e}")
-
-        error_msg = f"""## ❌ 系统错误
-
-推送过程中发生错误：
-
-{str(e)}
-
----
-{datetime.now().strftime('%Y-%m-%d %H:%M')}
-"""
-
-        send_wechat_message(webhook, error_msg)
-
-        sys.exit(1)
-
-    logger.info("任务完成")
+    send_wechat(webhook, message)
 
 
 if __name__ == "__main__":
