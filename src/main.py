@@ -54,7 +54,7 @@ def send_wechat_message(webhook_url: str, content: str):
         logger.error(f"❌ 消息推送异常: {e}")
         return False
 
-def fetch_rss_news_v3():
+news_list = fetch_rss_news_v3()
     """
     中国保险行业资讯聚合 v3（增强央视网来源）
     """
