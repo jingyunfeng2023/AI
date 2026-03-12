@@ -1,3 +1,4 @@
+from rss_fetcher import fetch_rss_news_v3
 """
 保险资讯聚合推送系统 - 主程序
 """
@@ -54,6 +55,7 @@ def send_wechat_message(webhook_url: str, content: str):
         logger.error(f"❌ 消息推送异常: {e}")
         return False
 
+</> python
 news_list = fetch_rss_news_v3()
     """
     中国保险行业资讯聚合 v3（增强央视网来源）
