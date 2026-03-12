@@ -54,51 +54,73 @@ def send_wechat_message(webhook_url: str, content: str):
         logger.error(f"❌ 消息推送异常: {e}")
         return False
 
-def fetch_rss_news():
+def fetch_rss_news_v3():
     """
-    聚合中国国内保险资讯RSS
-    返回最近24小时的保险相关新闻
+    中国保险行业资讯聚合 v3（增强央视网来源）
     """
 
     import feedparser
     from datetime import datetime, timedelta
 
+    # ======================
     # RSS资讯源
+    # ======================
+
     rss_sources = [
 
-        # 一级：官方权威
+        # -------- 央视网 --------
         ("央视财经", "http://www.cctv.com/program/rss/02/04/index.xml", 1),
+        ("央视经济", "http://www.cctv.com/program/rss/02/05/index.xml", 1),
+        ("央视新闻", "http://www.cctv.com/program/rss/01/01/index.xml", 1),
+
+        # -------- 政府 --------
         ("中国政府网", "http://www.gov.cn/rss/gwyw.xml", 1),
 
-        # 二级：财经媒体
+        # -------- 财经媒体 --------
         ("财新", "https://www.caixin.com/rss/finance.xml", 2),
         ("第一财经", "https://www.yicai.com/rss/news.xml", 2),
         ("财联社", "https://rsshub.app/cls/telegraph", 2),
         ("新浪财经", "https://finance.sina.com.cn/rss/finance.xml", 2),
 
+        # -------- 保险社区 --------
+        ("13个精算师", "https://rsshub.app/wechat/gh_7e0f706e6a79", 3),
+        ("慧保天下", "https://rsshub.app/wechat/gh_ae3e6a1c2a9e", 3),
+
     ]
 
+    # ======================
     # 保险关键词
+    # ======================
+
     keywords = [
-        "保险", "险企", "寿险", "财险",
-        "中国平安", "中国人寿",
-        "中国太保", "中国人保",
-        "新华保险", "友邦", "泰康",
-        "保险资金", "再保险"
+
+        "保险","险企","寿险","财险","再保险",
+
+        "中国平安","中国人寿",
+        "中国太保","中国人保",
+        "新华保险","友邦保险",
+        "泰康保险","阳光保险",
+
+        "保险资金","保险投资",
+        "保险监管","保险业"
+
     ]
 
-    news_list = []
-
-    # 24小时新闻
     time_threshold = datetime.now() - timedelta(hours=24)
 
-    for source_name, url, priority in rss_sources:
+    raw_news = []
+
+    # ======================
+    # RSS抓取
+    # ======================
+
+    for source, url, priority in rss_sources:
 
         try:
 
             feed = feedparser.parse(url)
 
-            for entry in feed.entries[:20]:
+            for entry in feed.entries[:30]:
 
                 title = entry.get("title", "")
                 summary = entry.get("summary", "")
@@ -118,37 +140,68 @@ def fetch_rss_news():
                 if published_time and published_time < time_threshold:
                     continue
 
-                news_item = {
-                    "title": title,
+                raw_news.append({
+
+                    "title": title.strip(),
                     "summary": summary[:120],
                     "link": link,
-                    "source": source_name,
+                    "source": source,
                     "priority": priority,
                     "time": published_time
-                }
 
-                news_list.append(news_item)
+                })
 
         except Exception as e:
-            print("RSS获取失败:", source_name, e)
 
-    # 去重
-    seen_titles = set()
-    unique_news = []
+            print("RSS抓取失败:", source, e)
 
-    for news in news_list:
+    # ======================
+    # 去重 + 热点统计
+    # ======================
 
-        if news["title"] not in seen_titles:
-            seen_titles.add(news["title"])
-            unique_news.append(news)
+    news_map = {}
 
-    # 按优先级排序
-    unique_news.sort(key=lambda x: x["priority"])
+    for item in raw_news:
 
+        title = item["title"]
+
+        if title not in news_map:
+
+            news_map[title] = item
+            news_map[title]["hot"] = 1
+
+        else:
+
+            news_map[title]["hot"] += 1
+
+            if item["priority"] < news_map[title]["priority"]:
+
+                news_map[title]["source"] = item["source"]
+                news_map[title]["priority"] = item["priority"]
+
+    news_list = list(news_map.values())
+
+    # ======================
+    # 排序逻辑
+    # ======================
+
+    news_list.sort(
+
+        key=lambda x: (
+
+            x["priority"],          # 官方优先
+            -x["hot"],              # 热点
+            x["time"] if x["time"] else datetime.min
+
+        )
+
+    )
+
+    # ======================
     # 返回最多10条
-    return unique_news[:10]
+    # ======================
 
-
+    return news_list[:10]
 
 def format_news_message(news_list):
     """
