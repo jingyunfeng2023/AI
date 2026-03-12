@@ -1,7 +1,4 @@
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  
-name: Insurance News Daily Push
+name: Insurance News Bot
 
 on:
   schedule:
@@ -9,28 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  fetch-and-push:
+  run:
+
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        cache: 'pip'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+    - run: pip install -r requirements.txt
 
-    - name: Run news fetcher and push
+    - run: python src/main.py
       env:
         WECHAT_WEBHOOK: ${{ secrets.WECHAT_WEBHOOK }}
-      run: |
-        cd src
-        python main.py
-
