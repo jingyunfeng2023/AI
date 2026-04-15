@@ -1,101 +1,54 @@
-"""
-保险资讯自动推送系统
-"""
-
 import os
-import sys
-import logging
-import requests
 from datetime import datetime
 
 from rss_fetcher import fetch_rss_news
+from analyzer import analyze_news, policy_impact, market_summary
+from wechat import send
 
 
-logging.basicConfig(
-
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-
-)
-
-logger = logging.getLogger(__name__)
-
-
-def send_wechat(webhook, content):
-
-    data = {
-
-        "msgtype": "markdown",
-
-        "markdown": {
-            "content": content
-        }
-
-    }
-
-    r = requests.post(webhook, json=data)
-
-    return r.json()
-
-
-def format_news(news_list):
+def format_message(news):
 
     today = datetime.now().strftime("%m.%d")
 
-    lines = [
+    msg = f"## 📊 金融情报早报\n\n日期：{today}\n\n"
 
-        "## 📰 保险资讯早报",
-        "",
-        f"> 日期：{today}",
-        "> 来源：央视 / 财联社 / 财新 / 第一财经",
-        ""
-    ]
+    # 市场总结
+    msg += f"### 📌 今日核心逻辑\n"
+    msg += f"> {market_summary(news)}\n\n"
 
-    if not news_list:
+    msg += "### 🔥 热点资讯\n\n"
 
-        lines.append("暂无新的保险资讯")
+    for i, n in enumerate(news, 1):
 
-    else:
+        msg += f"**{i}. {n['title']}**\n"
+        msg += f"> 来源：{n['source']}\n"
 
-        for i, n in enumerate(news_list, 1):
+        impact = policy_impact(n["title"])
 
-            lines.append(f"**{i}. {n['title']}**")
-            lines.append(f"> 来源：{n['source']}")
+        msg += f"> 影响：{impact}\n"
 
-            if n["summary"]:
-                lines.append(f"> 摘要：{n['summary']}")
+        if n["link"]:
+            msg += f"> [查看详情]({n['link']})\n"
 
-            if n["link"]:
-                lines.append(f"> [查看详情]({n['link']})")
+        msg += "\n"
 
-            lines.append("")
+    msg += "---\n"
+    msg += f"*更新时间：{datetime.now()}*"
 
-    lines.append("---")
-    lines.append(f"*更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}*")
-
-    return "\n".join(lines)
+    return msg
 
 
 def main():
 
     webhook = os.getenv("WECHAT_WEBHOOK")
 
-    if not webhook:
-
-        logger.error("未配置 WECHAT_WEBHOOK")
-        sys.exit(1)
-
-    logger.info("抓取新闻")
-
     news = fetch_rss_news()
 
-    logger.info(f"获取 {len(news)} 条新闻")
+    analyzed = analyze_news(news)
 
-    message = format_news(news)
+    msg = format_message(analyzed)
 
-    logger.info("推送企业微信")
-
-    send_wechat(webhook, message)
+    send(webhook, msg)
 
 
 if __name__ == "__main__":
